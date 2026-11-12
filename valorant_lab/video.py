@@ -21,11 +21,27 @@ def probe(path):
     try:
         fps = cap.get(cv2.CAP_PROP_FPS)
         frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-        width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if not cap.isOpened() or not math.isfinite(fps) or fps <= 0 or frames <= 0 or width <= 0 or height <= 0:
-            raise ValueError("Cannot read video metadata; file may be incomplete or codec unsupported")
-        return {"duration": frames / fps, "fps": fps, "width": width, "height": height,
-                "timing": "container/frame-rate estimate; variable-frame-rate timing may drift"}
+        width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(
+            cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        )
+        if (
+            not cap.isOpened()
+            or not math.isfinite(fps)
+            or fps <= 0
+            or frames <= 0
+            or width <= 0
+            or height <= 0
+        ):
+            raise ValueError(
+                "Cannot read video metadata; file may be incomplete or codec unsupported"
+            )
+        return {
+            "duration": frames / fps,
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "timing": "container/frame-rate estimate; variable-frame-rate timing may drift",
+        }
     finally:
         cap.release()
 
@@ -57,7 +73,11 @@ def frames(path, start, end, sample_fps, width, stop):
                 raise ValueError("Sampled frame could not be decoded")
             h, w = frame.shape[:2]
             if w > width:
-                frame = cv2.resize(frame, (width, max(1, round(h * width / w))), interpolation=cv2.INTER_AREA)
+                frame = cv2.resize(
+                    frame,
+                    (width, max(1, round(h * width / w))),
+                    interpolation=cv2.INTER_AREA,
+                )
             yield timestamp, frame
     finally:
         cap.release()
@@ -76,26 +96,49 @@ def transcode(source, target, stop, hwaccel="none", start=None, duration=None):
     base += ["-i", str(source)]
     if duration is not None:
         base += ["-t", str(duration)]
-    base += ["-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale='min(1280,iw)':-2",
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac", "-movflags", "+faststart", str(partial)]
+    base += [
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-vf",
+        "scale='min(1280,iw)':-2",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "24",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        str(partial),
+    ]
     # File-backed stderr avoids a pipe deadlock and unbounded memory on long files.
     import tempfile
+
     try:
         with tempfile.TemporaryFile() as errors:
             process = subprocess.Popen(base, stdout=subprocess.DEVNULL, stderr=errors)
             try:
                 while process.poll() is None:
-                    if stop.wait(.2):
+                    if stop.wait(0.2):
                         process.terminate()
                         try:
                             process.wait(timeout=5)
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
-                        raise InterruptedError("Video conversion interrupted; retry on restart")
+                        raise InterruptedError(
+                            "Video conversion interrupted; retry on restart"
+                        )
                 if process.returncode:
                     errors.seek(0)
-                    raise RuntimeError("FFmpeg conversion failed: " + errors.read(3000).decode(errors="replace"))
+                    raise RuntimeError(
+                        "FFmpeg conversion failed: "
+                        + errors.read(3000).decode(errors="replace")
+                    )
             finally:
                 if process.poll() is None:
                     process.kill()

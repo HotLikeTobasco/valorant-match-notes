@@ -20,5 +20,11 @@ def recording(tmp_path):
 
 @pytest.fixture
 def config(recording, tmp_path):
-    return Config(recordings_dir=recording.parent, data_dir=tmp_path / "data", settle_seconds=0,
-                  chunk_seconds=1, sample_fps=10, analysis_width=320)
+    return Config(
+        recordings_dir=recording.parent,
+        data_dir=tmp_path / "data",
+        settle_seconds=0,
+        chunk_seconds=1,
+        sample_fps=10,
+        analysis_width=320,
+    )

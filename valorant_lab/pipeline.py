@@ -51,7 +51,9 @@ class Pipeline:
             if not file.is_file() or file.suffix.lower() not in FORMATS:
                 continue
             path = file.resolve()
-            if root not in path.parents:  # Do not ingest symlinks outside the configured folder.
+            if (
+                root not in path.parents
+            ):  # Do not ingest symlinks outside the configured folder.
                 continue
             present.add(path)
             try:
@@ -61,7 +63,11 @@ class Pipeline:
                 if not previous or previous[0] != stamp:
                     self.seen[path] = (stamp, now)
                     continue
-                if not stat.st_size or now-previous[1] < self.config.settle_seconds or now-stat.st_mtime < self.config.settle_seconds:
+                if (
+                    not stat.st_size
+                    or now - previous[1] < self.config.settle_seconds
+                    or now - stat.st_mtime < self.config.settle_seconds
+                ):
                     continue
                 signature = source_signature(path)
                 existing = existing_by_path.get(str(path))
@@ -75,7 +81,9 @@ class Pipeline:
         return found
 
     def artifact_dir(self, session):
-        digest = hashlib.sha256((session["fingerprint"]+session["pipeline"]).encode()).hexdigest()[:16]
+        digest = hashlib.sha256(
+            (session["fingerprint"] + session["pipeline"]).encode()
+        ).hexdigest()[:16]
         return self.config.data_dir / "artifacts" / str(session["id"]) / digest
 
     def process_next(self):
@@ -87,7 +95,11 @@ class Pipeline:
             try:
                 self.process(session, path)
             except InterruptedError:
-                self.store.update(sid, state="queued", error="Interrupted; processing resumes when the app restarts")
+                self.store.update(
+                    sid,
+                    state="queued",
+                    error="Interrupted; processing resumes when the app restarts",
+                )
             except Exception as error:
                 log.exception("Processing failed for session %s", sid)
                 self.store.update(sid, state="failed", error=str(error)[:3000])
@@ -96,7 +108,9 @@ class Pipeline:
     def process(self, session, path):
         cfg, sid = self.config, session["id"]
         if source_signature(path) != session["fingerprint"]:
-            raise ValueError("Recording changed after discovery; the watcher will queue its new version")
+            raise ValueError(
+                "Recording changed after discovery; the watcher will queue its new version"
+            )
         metadata = probe(path)
         self.store.update(sid, metadata=json.dumps(metadata))
         duration = metadata["duration"]
@@ -112,13 +126,23 @@ class Pipeline:
         while start < duration:
             if self.stop.is_set():
                 raise InterruptedError()
-            end = min(duration, start+cfg.chunk_seconds)
-            detectors = [SceneDetector(cfg.scene_threshold), TemplateDetector(cfg.templates)]
+            end = min(duration, start + cfg.chunk_seconds)
+            detectors = [
+                SceneDetector(cfg.scene_threshold),
+                TemplateDetector(cfg.templates),
+            ]
             if cfg.onnx_model:
                 detectors.append(ONNXHeadDetector(cfg.onnx_model))
             events, observations = [], []
             count = 0
-            for timestamp, frame in frames(path, max(0, start-3), end, cfg.sample_fps, cfg.analysis_width, self.stop):
+            for timestamp, frame in frames(
+                path,
+                max(0, start - 3),
+                end,
+                cfg.sample_fps,
+                cfg.analysis_width,
+                self.stop,
+            ):
                 count += 1
                 for detector in detectors:
                     es, obs = detector.detect(frame, timestamp)
@@ -130,10 +154,20 @@ class Pipeline:
             if self.stop.is_set():
                 raise InterruptedError()
             if count == 0:
-                raise ValueError(f"No decodable frames at {start:.1f}s; recording may be truncated")
+                raise ValueError(
+                    f"No decodable frames at {start:.1f}s; recording may be truncated"
+                )
             if source_signature(path) != session["fingerprint"]:
-                raise ValueError("Recording changed during processing; retry after recording ends")
-            self.store.checkpoint(sid, start, end, duration, dict(events=events, observations=observations, frames=count))
+                raise ValueError(
+                    "Recording changed during processing; retry after recording ends"
+                )
+            self.store.checkpoint(
+                sid,
+                start,
+                end,
+                duration,
+                dict(events=events, observations=observations, frames=count),
+            )
             start = end
         events, observations = list(evidence.events), list(evidence.observations)
         use_reviewed_points = bool(evidence.observations)
@@ -145,11 +179,15 @@ class Pipeline:
                 event = Event.model_validate(raw)
                 key = (event.kind, event.source)
                 cooldown = 0.5 if event.kind == "scene_change" else 3
-                if event.time-last.get(key, -1e9) >= cooldown:
+                if event.time - last.get(key, -1e9) >= cooldown:
                     events.append(event)
                     last[key] = event.time
             if not use_reviewed_points:
-                observations.extend(Observation.model_validate(o) for o in chunk["observations"] if (o["time"], o["target_id"]) not in manual_keys)
+                observations.extend(
+                    Observation.model_validate(o)
+                    for o in chunk["observations"]
+                    if (o["time"], o["target_id"]) not in manual_keys
+                )
         report = analyse(events, observations, metadata, cfg.sample_fps)
         report["map_name"] = evidence.map_name
         report["note"] = evidence.note
@@ -161,11 +199,20 @@ class Pipeline:
             except RuntimeError:
                 if cfg.hwaccel == "none":
                     raise
-                report["decoder_warning"] = "Hardware decode failed; playback proxy used CPU fallback."
+                report["decoder_warning"] = (
+                    "Hardware decode failed; playback proxy used CPU fallback."
+                )
                 transcode(path, proxy, self.stop, "none")
         if source_signature(path) != session["fingerprint"]:
             raise ValueError("Recording changed before completion; watcher will rescan")
-        self.store.update(sid, report=json.dumps(report), evidence=evidence.model_dump_json(), state="complete", progress=1, error=None)
+        self.store.update(
+            sid,
+            report=json.dumps(report),
+            evidence=evidence.model_dump_json(),
+            state="complete",
+            progress=1,
+            error=None,
+        )
 
     def run(self):
         while not self.stop.is_set():
