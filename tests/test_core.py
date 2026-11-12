@@ -188,3 +188,25 @@ def test_missing_folder(tmp_path):
     p=Pipeline(Config(recordings_dir=tmp_path/'missing',data_dir=tmp_path/'data'))
     assert p.scan()==0
     assert 'not found' in p.scan_error
+
+
+def test_numerical_validation():
+    from valorant_lab.validate import evaluate
+    truth=Evidence(observations=[Observation(time=1,head_x=.5,head_y=.5,target_id='a')])
+    pred=Evidence(observations=[Observation(time=1.1,head_x=.5,head_y=.4,target_id='a')])
+    result=evaluate(pred,truth,1600,900)
+    assert result['aim']['alignment_mae_percent_frame_height']==pytest.approx(10)
+    assert result['aim']['head_location_mae_pixels']==pytest.approx(90)
+    assert evaluate(Evidence(),truth,1600,900)['aim']['alignment_mae_percent_frame_height'] is None
+
+
+def test_telemetry_calibration_and_order(tmp_path):
+    from valorant_lab.telemetry import load_telemetry, mouse_distance
+    p=tmp_path/'mouse.jsonl'
+    p.write_text('{"time":1,"dx":3,"dy":4}\n{"time":2,"dx":0,"dy":0,"fired":true}\n')
+    samples=list(load_telemetry(p,video_offset=.5))
+    assert samples[0].time==1.5
+    assert mouse_distance(samples)['angular_path_degrees'] is None
+    assert mouse_distance(samples,.2)['angular_path_degrees']==1
+    p.write_text('{"time":2,"dx":0,"dy":0}\n{"time":1,"dx":0,"dy":0}\n')
+    with pytest.raises(ValueError):list(load_telemetry(p))
