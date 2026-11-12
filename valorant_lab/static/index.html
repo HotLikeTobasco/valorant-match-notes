@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>VALORANT Review Lab</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script defer src="/static/app.js"></script>
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="/" aria-label="Review Lab home"
+        ><span class="mark">V/</span
+        ><span>REVIEW LAB<small>VALORANT · LOCAL ANALYSIS</small></span></a
+      >
+      <div class="sidebar-label">YOUR WORKSPACE</div>
+      <a class="nav active" href="#overview">◉ &nbsp; Session review</a
+      ><a class="nav" href="#trends">↗ &nbsp; Progress over time</a>
+      <div class="sidebar-label session-heading">
+        RECORDINGS <span id="session-count">0</span>
+      </div>
+      <div id="sessions" aria-label="Recordings"></div>
+      <div class="local-note">
+        <span class="dot"></span> Local by design
+        <p>Post-match review. Your recordings stay on this computer.</p>
+      </div>
+    </aside>
+    <main id="overview">
+      <header>
+        <div class="eyebrow">OBSERVE. REVIEW. IMPROVE.</div>
+        <div class="topline">
+          <h1>Make the next round better.</h1>
+          <span class="pill">POST-MATCH ONLY</span>
+        </div>
+        <p class="intro">
+          Turn your recordings into evidence you can actually learn from.
+        </p>
+      </header>
+      <div id="notice" class="notice" role="status">
+        Connecting to your local workspace…
+      </div>
+      <section class="session-bar">
+        <div>
+          <div class="eyebrow">CURRENT SESSION</div>
+          <h2 id="session-name">Waiting for a recording</h2>
+          <p id="session-meta">Set your recording folder to get started.</p>
+        </div>
+        <button id="retry" class="secondary" hidden>Reanalyse</button>
+      </section>
+      <div class="metrics">
+        <article>
+          <div class="metric-label">TARGET ALIGNMENT <span>↗</span></div>
+          <strong id="alignment">—</strong
+          ><small id="alignment-detail">Needs target observations</small>
+        </article>
+        <article>
+          <div class="metric-label">VERTICAL OFFSET <span>↕</span></div>
+          <strong id="vertical">—</strong
+          ><small id="vertical-detail">Positive = crosshair below head</small>
+        </article>
+        <article>
+          <div class="metric-label">FIRST SHOT DELAY <span>◷</span></div>
+          <strong id="delay">—</strong
+          ><small id="delay-detail">Needs linked shot annotations</small>
+        </article>
+        <article>
+          <div class="metric-label">OBSERVED ENGAGEMENTS <span>⌁</span></div>
+          <strong id="engagements">—</strong
+          ><small>From supplied target samples</small>
+        </article>
+      </div>
+      <div class="review-grid">
+        <section class="panel vod-panel">
+          <div class="panel-heading">
+            <h3>Session playback</h3>
+            <span id="video-state" class="muted">NO RECORDING SELECTED</span>
+          </div>
+          <div id="video-box">
+            <video
+              id="video"
+              controls
+              preload="metadata"
+              aria-label="Session recording"
+            ></video
+            ><button
+              id="point-layer"
+              hidden
+              aria-label="Click the enemy head or crosshair in the paused video"
+            ></button>
+            <div id="video-empty">
+              <span class="play-symbol">▷</span>
+              <h3>Your next review starts here.</h3>
+              <p>
+                Drop a completed recording into the watched folder.<br />MP4,
+                MKV, MOV, AVI, FLV and WebM supported.
+              </p>
+            </div>
+          </div>
+          <div class="playback-footer">
+            <span id="timestamp">00:00</span
+            ><span class="muted"
+              >Use an event below to jump to the evidence.</span
+            >
+          </div>
+          <div class="toolbar">
+            <button
+              id="frame-back"
+              class="secondary"
+              disabled
+              aria-label="Previous frame"
+            >
+              ← Frame</button
+            ><button
+              id="frame-next"
+              class="secondary"
+              disabled
+              aria-label="Next frame"
+            >
+              Frame →</button
+            ><button id="mark-head" disabled>Mark enemy head</button
+            ><button id="mark-crosshair" class="secondary" disabled>
+              Mark crosshair</button
+            ><label
+              >Target ID<input
+                id="target"
+                value="target-1"
+                maxlength="100"
+                aria-label="Target ID" /></label
+            ><button id="export-clip" class="secondary" disabled>
+              Export ±5s clip
+            </button>
+          </div>
+          <p id="annotation-help" class="hint">
+            Pause, enter a target ID, then mark its head. Crosshair defaults to
+            assumed screen centre until marked. Use a new ID for each target.
+          </p>
+          <a id="clip-download" hidden>Download clip</a>
+        </section>
+        <section class="panel placement">
+          <div class="panel-heading">
+            <h3>Crosshair placement</h3>
+            <span class="muted">TARGET RELATIVE</span>
+          </div>
+          <canvas
+            id="placement"
+            width="480"
+            height="340"
+            aria-label="Head offsets relative to the crosshair"
+          ></canvas>
+          <p id="placement-note" class="hint">
+            No target observations yet. Add reviewed head positions or configure
+            a validated head detector.
+          </p>
+          <div class="legend">
+            <span class="dot"></span> Head relative to crosshair
+            <span class="cross">+</span> Crosshair
+          </div>
+        </section>
+      </div>
+      <div class="lower-grid">
+        <section class="panel">
+          <div class="panel-heading">
+            <h3>Evidence timeline</h3>
+            <select id="event-filter" aria-label="Filter events">
+              <option value="all">All events</option>
+              <option value="kill">Kills</option>
+              <option value="death">Deaths</option>
+              <option value="shot">Shots</option>
+              <option value="round_start">Rounds</option>
+              <option value="scene_change">Scene candidates</option>
+              <option value="note">Notes</option>
+            </select>
+          </div>
+          <div id="timeline" class="event-list">
+            <p class="empty">
+              Events will appear here after processing or review.
+            </p>
+          </div>
+          <form id="event-form">
+            <div class="form-row">
+              <select id="event-kind" aria-label="Event type">
+                <option value="note">Review note</option>
+                <option value="kill">Kill</option>
+                <option value="death">Death</option>
+                <option value="shot">Shot on target ID</option>
+                <option value="round_start">Round start</option>
+                <option value="round_end">Round end</option>
+                <option value="match_start">Match start</option>
+                <option value="match_end">Match end</option>
+                <option value="utility">Utility</option></select
+              ><select id="event-tag" aria-label="Review tag">
+                <option value="">No tactical tag</option>
+                <option value="wide_swing">Wide swing (reviewed)</option>
+                <option value="utility_late">Late utility (reviewed)</option>
+                <option value="untraded">Untraded (reviewed)</option>
+                <option value="movement_shot">Moving shot (reviewed)</option>
+              </select>
+            </div>
+            <input
+              id="event-note"
+              maxlength="1000"
+              placeholder="What happened at this timestamp?"
+              aria-label="Event note"
+            /><button id="add-event" disabled>Add at current time</button>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-heading">
+            <h3>Your next focus</h3>
+            <span class="pill subtle">EVIDENCE FIRST</span>
+          </div>
+          <div id="coaching">
+            <p class="empty">
+              No recommendations yet. Coaching needs repeated observations, not
+              a guess from an empty session.
+            </p>
+          </div>
+          <p class="hint">
+            Transparent coaching rules. Confidence reflects input scores, not
+            calibrated probabilities. Tactical tags are reviewer
+            interpretations.
+          </p>
+        </section>
+      </div>
+      <section id="trends" class="panel trends">
+        <div class="panel-heading">
+          <h3>Progress over time</h3>
+          <span class="muted">MEAN ALIGNMENT ERROR · LOWER IS CLOSER</span>
+        </div>
+        <div id="trend-list">
+          <p class="empty">
+            Comparable sessions with target observations will appear here.
+          </p>
+        </div>
+        <p class="hint">
+          Changes compare sessions with the same map, pipeline and evidence
+          basis. Annotated samples may not represent the full match.
+        </p>
+      </section>
+      <section class="panel">
+        <div class="panel-heading">
+          <h3>Review & data</h3>
+          <span id="save-state" class="muted">NO UNSAVED CHANGES</span>
+        </div>
+        <div class="toolbar">
+          <label
+            >Map<input id="map-name" value="Unknown" maxlength="100" /></label
+          ><button id="save-evidence" disabled>Save review & calculate</button
+          ><button id="remove-point" class="secondary" disabled>
+            Remove last point</button
+          ><button id="remove-event" class="secondary" disabled>
+            Remove last event</button
+          ><button id="download-evidence" class="secondary" disabled>
+            Export evidence JSON</button
+          ><label class="file-button"
+            >Import evidence JSON<input
+              type="file"
+              id="import-evidence"
+              accept=".json,application/json"
+          /></label>
+        </div>
+        <div id="rounds"></div>
+        <details>
+          <summary>What this analysis can and cannot tell you</summary>
+          <p id="limits">
+            Without validated detectors, scene changes are only navigation
+            candidates. Kills, deaths, rounds and shots require reviewed
+            annotations or configured HUD templates. Frame timing is
+            approximate. World position, counter-strafing, angular aim and
+            hidden information are not measured.
+          </p>
+          <p id="metric-limit" class="hint"></p>
+        </details>
+      </section>
+      <footer>
+        <span>REVIEW LAB <b>/</b> Built for deliberate practice.</span
+        ><span>Unofficial fan project · Not affiliated with Riot Games</span>
+      </footer>
+    </main>
+    <div id="toast" role="alert" hidden></div>
+  </body>
+</html>

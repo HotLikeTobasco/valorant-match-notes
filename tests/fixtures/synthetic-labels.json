@@ -1,0 +1,5 @@
+{
+  "dataset": "synthetic-black-to-white-transition",
+  "scope": "Pipeline and event timestamp test only. NOT VALORANT footage or real-game validation.",
+  "events": [{"time": 1.0, "kind": "scene_change", "source": "manual", "confidence": 1}]
+}

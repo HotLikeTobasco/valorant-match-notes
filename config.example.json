@@ -1,0 +1,13 @@
+{
+  "recordings_dir": "~/Videos/VALORANT",
+  "data_dir": ".lab",
+  "poll_seconds": 5,
+  "settle_seconds": 30,
+  "sample_fps": 5,
+  "analysis_width": 640,
+  "chunk_seconds": 60,
+  "scene_threshold": 0.35,
+  "hwaccel": "none",
+  "templates": [],
+  "onnx_model": null
+}

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "valorant-match-notes"
+version = "0.2.0"
+description = "Local post-match VOD review with traceable evidence and optional detectors"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "opencv-python-headless>=4.10,<5", "numpy>=1.26,<3", "imageio-ffmpeg>=0.5,<1", "filelock>=3.16,<4"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "httpx>=0.27,<1"]
+onnx = ["onnxruntime>=1.20,<2"]
+
+[project.scripts]
+valorant-lab = "valorant_lab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["valorant_lab*"]
+
+[tool.setuptools.package-data]
+valorant_lab = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
