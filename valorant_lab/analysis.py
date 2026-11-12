@@ -1,5 +1,6 @@
 """Evidence-first measurements and transparent coaching rules, not an LLM."""
 from collections import defaultdict
+from bisect import bisect_left, bisect_right
 import math
 import statistics
 
@@ -49,13 +50,21 @@ def analyse(events, observations, metadata, sample_fps):
     }
     delays = []
     shot_errors = []
+    shots = defaultdict(list)
+    for event in events:
+        if event.kind == "shot" and event.source == "manual":
+            shots[event.target_id].append(event)
+    shot_times = {key: [e.time for e in items] for key, items in shots.items()}
+    point_times = {key: [p["time"] for p in items] for key, items in groups.items()}
     for engagement in engagements:
-        matching = [e for e in events if e.kind == "shot" and e.source == "manual" and e.target_id == engagement["target_id"]
-                    and engagement["start"] <= e.time <= engagement["end"]]
+        key = engagement["target_id"]
+        times = shot_times.get(key, [])
+        matching = shots[key][bisect_left(times, engagement["start"]):bisect_right(times, engagement["end"])]
         if matching:
             first = matching[0]
             delays.append((first.time-engagement["start"])*1000)
-            nearby = [p for p in points if p["target_id"] == first.target_id and abs(p["time"]-first.time) <= 1/sample_fps]
+            times = point_times[first.target_id]
+            nearby = groups[first.target_id][bisect_left(times, first.time-1/sample_fps):bisect_right(times, first.time+1/sample_fps)]
             if nearby:
                 shot_errors.append(min(nearby, key=lambda p: abs(p["time"]-first.time))["error"])
     metrics["first_shot_delay"] = metric(statistics.mean(delays) if delays else None, "ms", len(delays), "estimate", confidence,
@@ -66,6 +75,9 @@ def analyse(events, observations, metadata, sample_fps):
     starts = [e for e in events if e.kind == "round_start" and e.source == "manual"]
     for index, start in enumerate(starts):
         end = starts[index+1].time if index+1 < len(starts) else metadata["duration"]
+        ends = [e.time for e in events if e.kind == "round_end" and e.source == "manual" and start.time < e.time <= end]
+        if ends:
+            end = min(ends)
         rounds.append(dict(number=index+1, start=start.time, end=end,
                            kills=sum(e.kind == "kill" and e.source == "manual" and start.time <= e.time < end for e in events),
                            deaths=sum(e.kind == "death" and e.source == "manual" and start.time <= e.time < end for e in events)))
@@ -100,9 +112,13 @@ def evaluate_events(predictions, truth, tolerance=.25):
     """One-to-one nearest timestamp matching per event class. Both inputs must be labelled."""
     result = {}
     for kind in sorted({e.kind for e in predictions + truth}):
-        actual = [e.time for e in truth if e.kind == kind]
+        actual = sorted(e.time for e in truth if e.kind == kind)
         predicted = [e.time for e in predictions if e.kind == kind]
-        candidates = sorted((abs(p-t), pi, ti) for pi, p in enumerate(predicted) for ti, t in enumerate(actual) if abs(p-t) <= tolerance)
+        candidates = []
+        for pi, timestamp in enumerate(predicted):
+            for ti in range(bisect_left(actual, timestamp-tolerance), bisect_right(actual, timestamp+tolerance)):
+                candidates.append((abs(timestamp-actual[ti]), pi, ti))
+        candidates.sort()
         used_p, used_t = set(), set()
         errors = []
         for error, pi, ti in candidates:
@@ -114,3 +130,17 @@ def evaluate_events(predictions, truth, tolerance=.25):
                             recall=tp/len(actual) if actual else None,
                             timing_mae_seconds=statistics.mean(errors) if errors else None)
     return result
+
+
+def coaching_progress(report, previous):
+    """Compare only rules that fired in both comparable sessions; absent is not zero."""
+    old = {c['title']: c for c in (previous or {}).get('coaching', [])}
+    for card in report['coaching']:
+        prior = old.get(card['title'])
+        if prior and prior['basis'] == card['basis'] and prior['denominator'] and card['denominator']:
+            delta = 100*(card['frequency']/card['denominator'] - prior['frequency']/prior['denominator'])
+            card['progress'] = {'delta_percentage_points': delta,
+                                'text': f'Issue frequency changed {delta:+.1f} percentage points versus the previous comparable review. Sample selection may differ.'}
+        else:
+            card['progress'] = {'delta_percentage_points': None, 'text': 'No comparable previous recommendation yet.'}
+    return report

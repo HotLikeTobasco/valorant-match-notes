@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
 
+from .analysis import coaching_progress
 from .config import Config
 from .pipeline import Pipeline
 from .schema import Evidence
@@ -75,7 +76,16 @@ def create_app(config=None, run_worker=True):
         report = json.loads(session["report"]) if session["report"] else None
         data["map_name"] = report.get("map_name", "Unknown") if report else "Unknown"
         if detailed:
-            data["report"] = report
+            previous = None
+            if report and report.get("map_name", "Unknown").lower() != "unknown":
+                for old in pipeline.store.list():
+                    if (old["created"], old["id"]) >= (session["created"], session["id"]) or old["pipeline"] != session["pipeline"] or not old["report"] or old["state"] != "complete":
+                        continue
+                    candidate = json.loads(old["report"])
+                    if candidate.get("map_name") == report.get("map_name"):
+                        previous = candidate
+                        break
+            data["report"] = coaching_progress(report, previous) if report else None
             data["evidence"] = json.loads(session["evidence"]) if session["evidence"] else Evidence().model_dump()
         elif report:
             data["metrics"] = report["metrics"]
@@ -127,6 +137,15 @@ def create_app(config=None, run_worker=True):
             raise HTTPException(409, "Playback proxy is not ready")
         return FileResponse(path, media_type="video/mp4")
 
+    @app.get("/api/sessions/{sid}/detections")
+    def detections(sid: int):
+        row = require(sid)
+        if row["state"] != "complete":
+            raise HTTPException(409, "Finish processing before exporting detections")
+        chunks = pipeline.store.chunks(sid)
+        return Evidence.model_validate({"events": [e for c in chunks for e in c["events"]],
+                                        "observations": [o for c in chunks for o in c["observations"]]}).model_dump()
+
     @app.get("/api/trends")
     def trends():
         rows = []
@@ -138,7 +157,7 @@ def create_app(config=None, run_worker=True):
             if m["value"] is None:
                 continue
             comparable = [p for p in rows if p["pipeline"] == s["pipeline"] and p["map_name"] == r["map_name"] and p["basis"] == m["basis"]]
-            previous = comparable[-1]["value"] if comparable else None
+            previous = comparable[-1]["value"] if comparable and r["map_name"].lower() != "unknown" else None
             rows.append(dict(id=s["id"], name=Path(s["path"]).name, value=m["value"], samples=m["samples"],
                              basis=m["basis"], map_name=r["map_name"], pipeline=s["pipeline"],
                              delta=m["value"]-previous if previous is not None else None))

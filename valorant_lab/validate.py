@@ -1,5 +1,7 @@
 """Evaluate detector output against separate human labels; no bundled real-game claims."""
 import argparse
+from bisect import bisect_left, bisect_right
+from collections import defaultdict
 import json
 import math
 from pathlib import Path
@@ -13,8 +15,20 @@ def evaluate(predicted, truth, width, height, tolerance=.25):
     if width <= 0 or height <= 0 or not math.isfinite(tolerance) or tolerance < 0:
         raise ValueError("Dimensions must be positive and tolerance finite/non-negative")
     errors, head_errors, used = [], [], set()
-    candidates = sorted((abs(p.time-t.time), pi, ti) for pi,p in enumerate(predicted.observations)
-                        for ti,t in enumerate(truth.observations) if p.target_id == t.target_id and abs(p.time-t.time) <= tolerance)
+    by_target = defaultdict(list)
+    for ti, observation in enumerate(truth.observations):
+        by_target[observation.target_id].append((observation.time, ti))
+    for values in by_target.values():
+        values.sort()
+    time_index = {key: [t for t, _ in values] for key, values in by_target.items()}
+    candidates = []
+    for pi, prediction in enumerate(predicted.observations):
+        times = time_index.get(prediction.target_id, [])
+        values = by_target[prediction.target_id]
+        for offset in range(bisect_left(times, prediction.time-tolerance), bisect_right(times, prediction.time+tolerance)):
+            timestamp, ti = values[offset]
+            candidates.append((abs(prediction.time-timestamp), pi, ti))
+    candidates.sort()
     matched_predictions = set()
     for _, pi, ti in candidates:
         if pi in matched_predictions or ti in used:

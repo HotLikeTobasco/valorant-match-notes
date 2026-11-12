@@ -39,3 +39,21 @@ def test_full_api_review_and_range(config):
         assert client.post(f'/api/sessions/{sid}/clips',headers=headers,json={'start':0,'end':1000}).status_code==422
         assert client.post(f'/api/sessions/{sid}/retry',headers=headers).status_code==200
         assert client.post(f'/api/sessions/{sid}/retry',headers=headers).status_code==409
+
+
+def test_background_clip_export(config):
+    import time
+    app=create_app(config,run_worker=False)
+    p=app.state.pipeline;p.scan();p.scan();p.process_next()
+    sid=p.store.list()[0]['id']
+    with TestClient(app) as client:
+        token=client.get('/api/status').json()['token']
+        response=client.post(f'/api/sessions/{sid}/clips',headers={'X-Lab-Token':token},json={'start':.5,'end':1.5})
+        assert response.status_code==202
+        job_id=response.json()['id']
+        for _ in range(100):
+            status=client.get('/api/clips/'+job_id).json()
+            if status['state']!='processing':break
+            time.sleep(.05)
+        assert status['state']=='complete',status
+        assert client.get(status['url']).status_code==200

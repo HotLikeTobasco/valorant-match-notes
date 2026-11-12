@@ -13,6 +13,8 @@ def summarise(path):
         if not required.issubset(reader.fieldnames or []):
             raise ValueError("missing columns: " + ", ".join(sorted(required - set(reader.fieldnames or []))))
         for row in reader:
+            if None in row or any(row.get(key) is None for key in required):
+                raise ValueError(f"line {reader.line_num}: row does not match CSV header")
             result = (row["result"] or "").strip().upper()
             if result not in {"W", "L", "D"}:
                 raise ValueError(f"line {reader.line_num}: result must be W, L, or D")

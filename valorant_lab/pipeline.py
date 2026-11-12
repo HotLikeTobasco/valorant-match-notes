@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 import threading
 import time
+from filelock import FileLock
 
 from .analysis import analyse
 from .db import Store
@@ -34,6 +35,7 @@ class Pipeline:
         self.scan_error = None
         self.signature = config.signature()
         self.process_lock = threading.Lock()
+        self.instance_lock = FileLock(config.data_dir / "worker.lock")
 
     def scan(self, now=None):
         now = time.time() if now is None else now
@@ -43,6 +45,7 @@ class Pipeline:
             return 0
         found = 0
         present = set()
+        existing_by_path = {s["path"]: s for s in self.store.list()}
         self.scan_error = None
         for file in root.rglob("*"):
             if not file.is_file() or file.suffix.lower() not in FORMATS:
@@ -61,7 +64,7 @@ class Pipeline:
                 if not stat.st_size or now-previous[1] < self.config.settle_seconds or now-stat.st_mtime < self.config.settle_seconds:
                     continue
                 signature = source_signature(path)
-                existing = next((s for s in self.store.list() if s["path"] == str(path)), None)
+                existing = existing_by_path.get(str(path))
                 if existing and existing["state"] == "processing":
                     continue
                 self.store.enqueue(path, signature, self.signature)
@@ -133,6 +136,7 @@ class Pipeline:
             self.store.checkpoint(sid, start, end, duration, dict(events=events, observations=observations, frames=count))
             start = end
         events, observations = list(evidence.events), list(evidence.observations)
+        use_reviewed_points = bool(evidence.observations)
         chunks = self.store.chunks(sid)
         manual_keys = {(o.time, o.target_id) for o in observations}
         last = {}
@@ -144,7 +148,8 @@ class Pipeline:
                 if event.time-last.get(key, -1e9) >= cooldown:
                     events.append(event)
                     last[key] = event.time
-            observations.extend(Observation.model_validate(o) for o in chunk["observations"] if (o["time"], o["target_id"]) not in manual_keys)
+            if not use_reviewed_points:
+                observations.extend(Observation.model_validate(o) for o in chunk["observations"] if (o["time"], o["target_id"]) not in manual_keys)
         report = analyse(events, observations, metadata, cfg.sample_fps)
         report["map_name"] = evidence.map_name
         report["note"] = evidence.note
@@ -174,6 +179,7 @@ class Pipeline:
             self.stop.wait(self.config.poll_seconds)
 
     def start(self):
+        self.instance_lock.acquire(timeout=0)
         self.store.recover()
         self.thread = threading.Thread(target=self.run, name="vod-worker", daemon=True)
         self.thread.start()
@@ -182,3 +188,5 @@ class Pipeline:
         self.stop.set()
         if self.thread:
             self.thread.join(timeout=10)
+        if not self.thread or not self.thread.is_alive():
+            self.instance_lock.release()

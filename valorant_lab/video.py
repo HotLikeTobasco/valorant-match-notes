@@ -40,7 +40,7 @@ def frames(path, start, end, sample_fps, width, stop):
         cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
         next_time = start
         while not stop.is_set():
-            ok, frame = cap.read()
+            ok = cap.grab()
             if not ok:
                 break
             timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
@@ -52,6 +52,9 @@ def frames(path, start, end, sample_fps, width, stop):
             if timestamp + 1e-6 < next_time:
                 continue
             next_time = timestamp + 1 / sample_fps
+            ok, frame = cap.retrieve()
+            if not ok:
+                raise ValueError("Sampled frame could not be decoded")
             h, w = frame.shape[:2]
             if w > width:
                 frame = cv2.resize(frame, (width, max(1, round(h * width / w))), interpolation=cv2.INTER_AREA)

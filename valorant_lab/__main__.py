@@ -16,12 +16,14 @@ def main():
         import time
         from .pipeline import Pipeline
         pipeline = Pipeline(config)
-        pipeline.store.recover()
-        pipeline.scan()
-        time.sleep(config.settle_seconds)
-        pipeline.scan()
-        while pipeline.process_next():
-            pass
+        with pipeline.instance_lock.acquire(timeout=0):
+            pipeline.store.recover()
+            pipeline.scan()
+            if not pipeline.scan_error:
+                time.sleep(config.settle_seconds)
+                pipeline.scan()
+                while pipeline.process_next():
+                    pass
         errors = [s for s in pipeline.store.list() if s["state"] == "failed"]
         print(json.dumps({"sessions": len(pipeline.store.list()), "failed": len(errors), "watcher_error": pipeline.scan_error}))
         raise SystemExit(1 if errors or pipeline.scan_error else 0)

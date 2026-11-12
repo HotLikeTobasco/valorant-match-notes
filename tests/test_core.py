@@ -210,3 +210,47 @@ def test_telemetry_calibration_and_order(tmp_path):
     assert mouse_distance(samples,.2)['angular_path_degrees']==1
     p.write_text('{"time":2,"dx":0,"dy":0}\n{"time":1,"dx":0,"dy":0}\n')
     with pytest.raises(ValueError):list(load_telemetry(p))
+
+
+def test_tactical_progress_does_not_invent_baselines():
+    from valorant_lab.analysis import coaching_progress
+    report={'coaching':[{'title':'X','basis':'reviewer interpretation','frequency':3,'denominator':6}]}
+    assert coaching_progress(report,None)['coaching'][0]['progress']['delta_percentage_points'] is None
+    previous={'coaching':[{'title':'X','basis':'reviewer interpretation','frequency':3,'denominator':3}]}
+    assert coaching_progress(report,previous)['coaching'][0]['progress']['delta_percentage_points']==-50
+
+
+def test_round_end_stops_round_counts():
+    events=[Event(time=0,kind='round_start'),Event(time=1,kind='round_end'),Event(time=2,kind='kill')]
+    report=analyse(events,[],{'width':16,'height':9,'duration':10},5)
+    assert report['rounds'][0]['kills']==0
+    assert report['rounds'][0]['end']==1
+
+
+def test_single_worker_lock(config):
+    from filelock import Timeout
+    first,second=Pipeline(config),Pipeline(config)
+    first.start()
+    try:
+        with pytest.raises(Timeout): second.start()
+    finally:
+        first.close()
+
+
+def test_onnx_adapter_contract_and_tracks():
+    from valorant_lab.detectors import ONNXHeadDetector
+    detector=ONNXHeadDetector.__new__(ONNXHeadDetector)
+    class Session:
+        def run(self,*args):return [np.array([[.4,.3,.5,.4,.9,0]],dtype=np.float32)]
+    detector.session=Session();detector.input='images';detector.tracks={};detector.counter=0
+    _, first=detector.detect(np.zeros((90,160,3),dtype=np.uint8),1)
+    _, second=detector.detect(np.zeros((90,160,3),dtype=np.uint8),1.1)
+    assert first[0].target_id==second[0].target_id
+    assert first[0].source=='onnx'
+    assert first[0].crosshair_source=='assumed_center'
+
+
+def test_csv_rejects_extra_cells(tmp_path):
+    p=tmp_path/'bad.csv'
+    p.write_text('map,agent,result,kills,deaths,assists,lesson\nx,y,W,1,2,3,hello,extra\n')
+    with pytest.raises(ValueError,match='header'):summarise(p)
